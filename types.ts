@@ -10,15 +10,23 @@ export interface ExecutionPlan {
   notes: string;
 }
 
+export interface InteractionMessage {
+  role: 'user' | 'app';
+  content: string;
+  timestamp: Date;
+}
+
 export interface AnalysisState {
   isAnalyzing: boolean;
   isExecuting: boolean;
   isExecuted: boolean;
+  isInteracting: boolean;
   error: string | null;
   plan: ExecutionPlan | null;
   logs: string[];
   executionLogs: string[];
   currentStep: number;
+  interactions: InteractionMessage[];
 }
 
 export const ANALYSIS_STEPS = [

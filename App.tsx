@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import { GeminiService } from './services/geminiService';
-import { AnalysisState, ANALYSIS_STEPS, ExecutionPlan } from './types';
+import { AnalysisState, ANALYSIS_STEPS, ExecutionPlan, InteractionMessage } from './types';
 import Terminal from './components/Terminal';
 import PlanDisplay from './components/PlanDisplay';
 import ExecutionView from './components/ExecutionView';
@@ -12,11 +13,13 @@ const App: React.FC = () => {
     isAnalyzing: false,
     isExecuting: false,
     isExecuted: false,
+    isInteracting: false,
     error: null,
     plan: null,
     logs: ["Ready to analyze repository. Paste a GitHub URL to begin."],
     executionLogs: [],
     currentStep: -1,
+    interactions: [],
   });
 
   const handleAnalyze = async (e: React.FormEvent) => {
@@ -30,16 +33,17 @@ const App: React.FC = () => {
       ...state,
       isAnalyzing: true,
       isExecuted: false,
+      isExecuting: false,
       error: null,
       plan: null,
       logs: [`Initiating analysis for ${repoUrl}...`],
       currentStep: 0,
+      interactions: [],
     });
 
     const gemini = new GeminiService();
 
     try {
-      // Simulate steps for UI feel
       for (let i = 0; i < ANALYSIS_STEPS.length; i++) {
         setState(prev => ({
           ...prev,
@@ -55,7 +59,7 @@ const App: React.FC = () => {
         ...prev,
         isAnalyzing: false,
         plan,
-        logs: [...prev.logs, "✅ Analysis complete! Execution plan generated."],
+        logs: [...prev.logs, "✅ Analysis complete! System ready for boot simulation."],
         currentStep: ANALYSIS_STEPS.length,
       }));
     } catch (err: any) {
@@ -87,33 +91,27 @@ const App: React.FC = () => {
 
     try {
       await new Promise(r => setTimeout(r, 1000));
-      addLog("Successfully connected to ephemeral host.");
-      addLog(`Cloning repository: ${repoUrl}...`);
-      await new Promise(r => setTimeout(r, 1500));
-      addLog("Repo cloned to /tmp/workspace.");
+      addLog("Successfully connected to host.");
+      addLog(`Targeting repository: ${repoUrl}`);
+      await new Promise(r => setTimeout(r, 1200));
+      addLog("Preparing ephemeral workspace /tmp/app_runner...");
 
-      // Run Install Commands
       for (const cmd of state.plan.install_commands) {
         addLog(`> ${cmd}`);
-        await new Promise(r => setTimeout(r, 1000));
-        addLog(`Progress: ${cmd.split(' ')[0]} packages resolved and cached.`);
+        await new Promise(r => setTimeout(r, 800));
       }
-      addLog("Installation finished.");
+      addLog("Packages installed successfully.");
 
-      // Run Build Commands
       for (const cmd of state.plan.build_commands) {
         addLog(`> ${cmd}`);
-        await new Promise(r => setTimeout(r, 1200));
-        addLog("Optimizing assets for production...");
-        addLog(`Build artifact generated in /dist.`);
+        await new Promise(r => setTimeout(r, 1000));
       }
-
-      // Run Command
+      
       const runCmd = state.plan.run_commands[0] || 'npm start';
       addLog(`> ${runCmd}`);
       await new Promise(r => setTimeout(r, 800));
-      addLog(`Service started. Listening on port ${state.plan.exposed_port || '3000'}`);
-      addLog("Health check: OK (200)");
+      addLog(`Application instance listening on port ${state.plan.exposed_port || '3000'}`);
+      addLog("Internal Network: LIVE");
 
       setState(prev => ({
         ...prev,
@@ -121,7 +119,59 @@ const App: React.FC = () => {
         isExecuted: true,
       }));
     } catch (err) {
-      addLog("Critical error during execution simulation.");
+      addLog("Simulation error: Host connection interrupted.");
+    }
+  };
+
+  const handleSendMessage = async (msg: string) => {
+    if (!state.plan) return;
+
+    const userMsg: InteractionMessage = { role: 'user', content: msg, timestamp: new Date() };
+    setState(prev => ({
+      ...prev,
+      interactions: [...prev.interactions, userMsg],
+      isInteracting: true
+    }));
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const prompt = `
+        You are simulating a running instance of a GitHub project.
+        Project URL: ${repoUrl}
+        Project Type: ${state.plan.project_type}
+        Technologies: ${[...state.plan.language, ...state.plan.frameworks].join(', ')}
+        
+        The user (who is not a developer) wants to use this app. 
+        They said: "${msg}"
+        
+        Act as the app or its main interface. 
+        If it is a CLI tool, return simulated command output. 
+        If it is a web app, describe the UI change or perform the logical action in plain English.
+        Be helpful and concise. Keep the response under 100 words.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+
+      const appMsg: InteractionMessage = { 
+        role: 'app', 
+        content: response.text || "Simulation offline. Please try again.", 
+        timestamp: new Date() 
+      };
+
+      setState(prev => ({
+        ...prev,
+        interactions: [...prev.interactions, appMsg],
+        isInteracting: false
+      }));
+    } catch (err) {
+      setState(prev => ({
+        ...prev,
+        isInteracting: false,
+        interactions: [...prev.interactions, { role: 'app', content: "Error: Could not reach simulated app logic.", timestamp: new Date() }]
+      }));
     }
   };
 
@@ -131,18 +181,19 @@ const App: React.FC = () => {
       isAnalyzing: false,
       isExecuting: false,
       isExecuted: false,
+      isInteracting: false,
       error: null,
       plan: null,
       logs: ["Ready to analyze repository. Paste a GitHub URL to begin."],
       executionLogs: [],
       currentStep: -1,
+      interactions: [],
     });
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8">
-      {/* Background decoration */}
-      <div className="fixed top-0 left-0 w-full h-full -z-10 overflow-hidden opacity-20 pointer-events-none">
+      <div className="fixed top-0 left-0 w-full h-full -z-10 overflow-hidden opacity-10 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600 rounded-full blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-violet-600 rounded-full blur-[120px]"></div>
       </div>
@@ -153,23 +204,25 @@ const App: React.FC = () => {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
           </span>
-          DevOps Cloud Runner
+          AI Feature Sandbox
         </div>
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
-          GitHub Cloud Runner
+          GitHub Project Runner
         </h1>
-        <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          One-click analysis and execution simulation. Paste a URL to analyze, build, and simulate a running environment.
+        <p className="text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
+          The easiest way to explore GitHub projects. We analyze, "run," and let you <span className="text-indigo-400 font-semibold underline underline-offset-4 decoration-indigo-500/30">interact</span> with any repository's features instantly.
         </p>
       </header>
 
-      <main className="w-full max-w-5xl space-y-8">
-        {/* Input Section */}
+      <main className="w-full max-w-6xl space-y-8">
         {!state.plan && !state.isExecuting && !state.isExecuted && (
-          <div className="glass p-8 rounded-2xl shadow-2xl glow-indigo">
+          <div className="glass p-8 rounded-2xl shadow-2xl glow-indigo max-w-3xl mx-auto border-t-2 border-indigo-500/20">
             <form onSubmit={handleAnalyze} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-300 ml-1">Repository URL</label>
+                <div className="flex justify-between items-center">
+                   <label className="text-sm font-semibold text-slate-300 ml-1">Paste Repository URL</label>
+                   <span className="text-[10px] text-slate-500 uppercase tracking-tighter">Enter any public repo</span>
+                </div>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" fill="currentColor" viewBox="0 0 24 24">
@@ -182,7 +235,7 @@ const App: React.FC = () => {
                     onChange={(e) => setRepoUrl(e.target.value)}
                     placeholder="https://github.com/username/project"
                     disabled={state.isAnalyzing}
-                    className="block w-full pl-12 pr-4 py-4 bg-slate-900/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-white transition-all disabled:opacity-50"
+                    className="block w-full pl-12 pr-4 py-4 bg-slate-900/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-white transition-all disabled:opacity-50 font-mono text-sm"
                   />
                 </div>
               </div>
@@ -198,16 +251,16 @@ const App: React.FC = () => {
               >
                 {state.isAnalyzing ? (
                   <>
-                    <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Analyzing...
+                    Analyzing Project Source...
                   </>
                 ) : (
                   <>
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Start Analysis
+                    Start Project Analysis
                   </>
                 )}
               </button>
@@ -215,9 +268,8 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Progress Section */}
         {state.isAnalyzing && (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="space-y-4 max-w-3xl mx-auto">
             <Terminal logs={state.logs} />
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div 
@@ -228,61 +280,69 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Results Section */}
         {state.plan && !state.isExecuting && !state.isExecuted && (
-          <div className="space-y-6 max-w-4xl mx-auto">
+          <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
-                Inferred Strategy
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
+                Analysis Results
               </h2>
               <button 
                 onClick={reset}
-                className="text-sm font-medium text-slate-400 hover:text-white transition-colors"
+                className="text-xs font-semibold text-slate-500 hover:text-white transition-colors flex items-center gap-1"
               >
-                Start Over
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                RESET
               </button>
             </div>
             <PlanDisplay plan={state.plan} onExecute={executePlan} isExecuting={state.isExecuting} />
           </div>
         )}
 
-        {/* Execution Simulation Section */}
         {(state.isExecuting || state.isExecuted) && state.plan && (
           <div className="space-y-6">
              <div className="flex justify-between items-center px-2">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"/><path d="m17 17-5 5-5-5"/><path d="m17 7-5-5-5 5"/></svg>
-                Runner Instance
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"/><path d="m17 17-5 5-5-5"/><path d="m17 7-5-5-5 5"/></svg>
+                AI Project Instance
               </h2>
               <button 
                 onClick={reset}
                 disabled={state.isExecuting}
-                className="text-sm font-medium text-slate-400 hover:text-white transition-colors disabled:opacity-30"
+                className="text-xs font-semibold text-slate-500 hover:text-white transition-colors disabled:opacity-30"
               >
-                Terminate Runner
+                CLOSE RUNNER
               </button>
             </div>
-            <ExecutionView plan={state.plan} logs={state.executionLogs} isFinished={state.isExecuted} />
+            <ExecutionView 
+              plan={state.plan} 
+              logs={state.executionLogs} 
+              isFinished={state.isExecuted} 
+              repoUrl={repoUrl}
+              interactions={state.interactions}
+              onSendMessage={handleSendMessage}
+              isInteracting={state.isInteracting}
+            />
           </div>
         )}
 
-        {/* Error State */}
         {state.error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 max-w-4xl mx-auto">
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 max-w-xl mx-auto animate-bounce">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <p className="text-sm font-medium">{state.error}</p>
           </div>
         )}
       </main>
 
-      <footer className="w-full max-w-5xl py-12 mt-auto text-center border-t border-slate-800/50">
-        <p className="text-slate-500 text-xs tracking-widest uppercase mb-2">
-          Powered by Gemini 3 Flash & Google Search Grounding
-        </p>
-        <p className="text-slate-600 text-[10px] italic">
-          Disclaimer: Execution is simulated for demonstration purposes. ephemeral containers are mock environments.
-        </p>
+      <footer className="w-full max-w-6xl py-12 mt-auto text-center border-t border-slate-800/30">
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-slate-500 text-[10px] tracking-widest uppercase font-bold">
+            Project Infrastructure powered by Gemini AI
+          </p>
+          <p className="text-slate-600 text-[10px] italic max-w-md">
+            Interactive sessions are generated by real-time simulation logic. No local binaries are executed.
+          </p>
+        </div>
       </footer>
     </div>
   );
