@@ -1,0 +1,5 @@
+{
+  "name": "GitHub Project Runner AI",
+  "description": "An automated DevOps assistant that analyzes GitHub repositories to generate precise build, install, and execution plans using Gemini AI.",
+  "requestFramePermissions": []
+}
